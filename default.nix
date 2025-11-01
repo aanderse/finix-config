@@ -38,6 +38,7 @@ let
       tmpfiles
       udev
 
+      anacron
       atd
       bash
       bluetooth
@@ -61,6 +62,7 @@ let
       niri
       nix-daemon
       nzbget
+      openresolv
       openssh
       polkit
       power-profiles-daemon
@@ -91,6 +93,7 @@ let
     modules = [
       { nixpkgs.pkgs = pkgs; }
       ./configuration.nix
+      <nixpkgs/nixos/modules/programs/xfconf.nix>
     ] ++ modules;
   };
 in

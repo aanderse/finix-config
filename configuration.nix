@@ -17,8 +17,12 @@ let
     udev = pkgs.libudev-zero;
   });
 
-  kodi' = pkgs.kodi-wayland.override (lib.optionalAttrs config.services.mdevd.enable {
+  kodi' = pkgs.kodi.override (lib.optionalAttrs config.services.mdevd.enable {
     udev = pkgs.libudev-zero;
+
+    libcec = pkgs.libcec.override {
+      udev = pkgs.libudev-zero;
+    };
   });
 
   libinput' = (pkgs.libinput.override {
@@ -70,56 +74,31 @@ let
     systemdSupport = false;
     udev = pkgs.libudev-zero;
   });
-
 in
 {
   imports = [
     ./hardware-configuration.nix
     ./sops
-    ./openresolv.nix
     ./pam.nix
     ./test.nix
 
     ./limine.nix
-    ./cronie.nix
   ];
 
-  services.cronie.enable = false;
-  services.cronie.settings = {
-    PATH = [ pkgs.hello ];
-    # MAILTO = "aaron@fosslib.net";
-    # MAILFROM = "root@framework";
-    # RANDOM_DELAY = "10";
+  providers.scheduler.backend = lib.mkForce "fcron";
+
+  services.cron.enable = true;
+  services.cron.extraArgs = [ "-s" ];
+  services.cron.settings = {
+    RANDOM_DELAY = 10;
   };
-  services.cronie.systab = [
-    "* * * * * aaron echo Hello World >> /home/aaron/cronout"
-    "* * * * * aaron hello -g 'foo bar' >> /home/aaron/cronout.extra"
-    # "* * * * * aaron ls -l >> /home/aaron/cronout"
-  ];
 
-  boot.limine.extraEntries = ''
-    /Zorin OS
-      protocol: linux
-      cmdline: blahblah
-      foo: bar
+  services.anacron.enable = true;
+  services.anacron.settings = {
+    NO_MAIL_OUTPUT = 1;
+  };
 
-    /+finix
-      //gen 1
-        protocl: linux
-        cmdline: blah
-
-      //gen 2
-        protocl: linux
-        cmdline: blah
-
-      //gen 3
-        protocl: linux
-        cmdline: blah
-
-      //gen 4
-        protocl: linux
-        cmdline: blah
-  '';
+  programs.xfconf.enable = true;
 
   security.pam.environment = {
     SSH_ASKPASS.default = "${pkgs.seahorse}/libexec/seahorse/ssh-askpass";
@@ -133,8 +112,6 @@ in
     # https://community.frame.work/t/linux-battery-life-tuning/6665/156
     "nvme.noacpi=1"
   ];
-
-  services.uptime-kuma.enable = true;
 
   # TODO: options for nix remote builders
   environment.etc."nix/machines".enable = true;
@@ -153,7 +130,7 @@ in
   '';
 
   sops.validateSopsFiles = false;
-  sops.defaultSopsFile = "/home/aaron/framework/secrets.yaml";
+  sops.defaultSopsFile = ./secrets.yaml;
   sops.age.sshKeyPaths = [ "/var/lib/sshd/ssh_host_ed25519_key" ];
 
   sops.secrets."aaron/password".neededForUsers = true;
@@ -190,22 +167,6 @@ in
   networking.hostName = "framework";
 
   finit.runlevel = 3;
-  finit.package = pkgs.finit.overrideAttrs (o: {
-    configureFlags = [
-      "--sysconfdir=/etc"
-      "--localstatedir=/var"
-
-      # tweak default plugin list
-      "--enable-modules-load-plugin=yes"
-      "--enable-hotplug-plugin=no"
-
-      # minimal replacement for systemd notification library
-      "--with-libsystemd"
-
-      # monitor kernel events, like ac power status
-      "--with-keventd"
-    ];
-  });
 
   finit.tasks.charge-limit.command = "${lib.getExe pkgs.framework-tool} --charge-limit 80";
   finit.tasks.nftables.command = "${lib.getExe pkgs.nftables} -f /etc/nftables.rules";
@@ -250,11 +211,11 @@ in
   services.mdevd.debug = true;
 
   # .* 0:0 660 @${pkgs.finit}/libexec/finit/logit -s -t mdevd "event=$ACTION dev=$MDEV subsystem=$SUBSYSTEM path=$DEVPATH devtype=$DEVTYPE modalias=$MODALIAS major=$MAJOR minor=$MINOR"
+  # TODO: shouldn't this just be included by default?
   services.mdevd.hotplugRules = lib.mkMerge [
-    # TODO: shouldn't this just be included by default?
     (lib.mkAfter ''
       SUBSYSTEM=input;.* root:input 660
-      SUBSYSTEM=sound;.*  root:audio 660
+      SUBSYSTEM=sound;.* root:audio 660
     '')
 
     ''
@@ -281,24 +242,38 @@ in
       event[0-9]+ root:input 660 =input/
       mice        root:input 660 =input/
       mouse[0-9]+ root:input 660 =input/
+
+      rfkill      root:${config.services.seatd.group} 660
     ''
   ];
   services.polkit.enable = true;
+
   programs.openresolv.enable = true;
+  programs.openresolv.package = pkgs.openresolv.overrideAttrs (_: {
+    # TODO: could potentially make 'RESTARTCMD' an overridable option for the package
+    configurePhase = ''
+      cat > config.mk <<EOF
+      PREFIX=$out
+      SYSCONFDIR=/etc
+      SBINDIR=$out/sbin
+      LIBEXECDIR=$out/libexec/resolvconf
+      VARDIR=/run/resolvconf
+      MANDIR=$out/share/man
+      RESTARTCMD="/run/current-system/sw/bin/initctl restart \\\\\$\$1"
+      EOF
+    '';
+  });
   programs.bash.enable = true;
   programs.fish.enable = true;
-
   programs.virtualbox.enable = true;
-  #programs.virtualbox.package = pkgs.virtualbox.overrideAttrs (o: {
-  #  patches = o.patches ++ [ ./virtualbox.patch ];
-  #});
+  programs.brightnessctl.enable = true;
+
   # https://forums.virtualbox.org/viewtopic.php?p=556540#p556540
   environment.etc."modprobe.d/blacklist-kvm.conf".text = ''
     # kernel 6.12 and later ship with kvm enabled by default, which breaks vbox
     blacklist kvm
     blacklist kvm_intel
   '';
-  programs.brightnessctl.enable = true;
 
   # TODO: create graphical desktop profiles
   services.rtkit.enable = true;
@@ -429,10 +404,6 @@ in
     pkgs.dconf
   ];
 
-  environment.etc."sudoers".text = lib.mkAfter ''
-    %${config.services.seatd.group} ALL = (root) NOPASSWD: /run/current-system/sw/bin/pm-suspend
-  '';
-
   fonts.fontconfig.enable = true;
 
   fonts.enableDefaultPackages = true;
@@ -445,7 +416,7 @@ in
     nerd-fonts._0xproto
     nerd-fonts.droid-sans-mono
     noto-fonts
-    noto-fonts-emoji
+    noto-fonts-color-emoji
     proggyfonts
   ];
 
@@ -462,6 +433,12 @@ in
     }
     { command = "/run/current-system/sw/bin/reboot";
       users = [ "aaron" ];
+      requirePassword = false;
+    }
+  ] ++ lib.optionals config.services.mdevd.enable [
+    {
+      command = "/run/current-system/sw/bin/pm-suspend";
+      groups = [ config.services.seatd.group] ;
       requirePassword = false;
     }
   ];
@@ -498,6 +475,7 @@ in
     createHome =  true;
 
     extraGroups = [
+      config.hardware.i2c.group
       config.services.seatd.group
       "audio"
       "incus-admin"
@@ -517,6 +495,7 @@ in
   environment.systemPackages = [
     pkgs.alacritty
     pkgs.bzmenu
+    pkgs.ddcutil
     pkgs.dex
     pkgs.ghostty
     pkgs.iwmenu
@@ -533,6 +512,7 @@ in
     pkgs.direnv
     pkgs.dnsutils
     pkgs.git
+    pkgs.glow
     pkgs.htop
     pkgs.lnav
     pkgs.jq
@@ -581,12 +561,12 @@ in
     (pkgs.element-desktop.override { commandLineArgs = "--password-store=gnome-libsecret"; })
     pkgs.joplin-desktop
     (pkgs.pidgin.override {
-      plugins = [
-        pkgs.pidgin-otr
-        pkgs.pidgin-carbons
-        pkgs.pidgin-osd
-        pkgs.pidgin-window-merge
-        pkgs.purple-plugin-pack
+      plugins = with pkgs.pidginPackages; [
+        pidgin-otr
+        pidgin-carbons
+        pidgin-osd
+        pidgin-window-merge
+        purple-plugin-pack
       ];
     })
     pkgs.quasselClient
@@ -654,4 +634,10 @@ in
   # https://wiki.nixos.org/wiki/Accelerated_Video_Playback#Intel
   hardware.graphics.extraPackages = [ pkgs.intel-media-driver ];
   hardware.graphics.extraPackages32 = [ pkgs.pkgsi686Linux.intel-media-driver ];
+
+  # programs.kodi.enable = true;
+  # programs.kodi.desktopSession.enable = true;
+  # programs.kodi.settings = {
+  #   # ...
+  # };
 }
