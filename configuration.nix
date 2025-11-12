@@ -1,79 +1,110 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 let
-  pipewire' = (pkgs.pipewire.override (lib.optionalAttrs config.services.mdevd.enable {
-    enableSystemd = false;
-    udev = pkgs.libudev-zero;
-  })).overrideAttrs (o: {
-    # https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/2398#note_2967898
-    patches = o.patches or [ ] ++ [ ./pipewire.patch ];
-  });
+  pipewire' =
+    (pkgs.pipewire.override (
+      lib.optionalAttrs config.services.mdevd.enable {
+        enableSystemd = false;
+        udev = pkgs.libudev-zero;
+      }
+    )).overrideAttrs
+      (o: {
+        # https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/2398#note_2967898
+        patches = o.patches or [ ] ++ [ ./pipewire.patch ];
+      });
 
-  wireplumber' = pkgs.wireplumber.override (lib.optionalAttrs config.services.mdevd.enable {
-    pipewire = pipewire';
-  });
+  wireplumber' = pkgs.wireplumber.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      pipewire = pipewire';
+    }
+  );
 
-  aquamarine' = pkgs.aquamarine.override (lib.optionalAttrs config.services.mdevd.enable {
-    libinput = libinput';
-    udev = pkgs.libudev-zero;
-  });
-
-  kodi' = pkgs.kodi.override (lib.optionalAttrs config.services.mdevd.enable {
-    udev = pkgs.libudev-zero;
-
-    libcec = pkgs.libcec.override {
+  aquamarine' = pkgs.aquamarine.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      libinput = libinput';
       udev = pkgs.libudev-zero;
-    };
-  });
+    }
+  );
 
-  libinput' = (pkgs.libinput.override {
-    udev = pkgs.libudev-zero;
-  }).overrideAttrs (o: {
-    mesonFlags = (o.mesonFlags or [ ]) ++ [
-      "-Dlibwacom=false"
-    ];
-  });
+  kodi' = pkgs.kodi.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      udev = pkgs.libudev-zero;
 
-  niri' = pkgs.niri.override (lib.optionalAttrs config.services.mdevd.enable {
-    eudev = pkgs.libudev-zero;
-    withSystemd = false;
-    libinput = libinput';
-  });
+      libcec = pkgs.libcec.override {
+        udev = pkgs.libudev-zero;
+      };
+    }
+  );
 
-  labwc' = pkgs.labwc.override (lib.optionalAttrs config.services.mdevd.enable {
-    libinput = libinput';
-    wlroots_0_19 = pkgs.wlroots_0_19.override {
+  libinput' =
+    (pkgs.libinput.override {
+      udev = pkgs.libudev-zero;
+    }).overrideAttrs
+      (o: {
+        mesonFlags = (o.mesonFlags or [ ]) ++ [
+          "-Dlibwacom=false"
+        ];
+      });
+
+  niri' = pkgs.niri.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      eudev = pkgs.libudev-zero;
+      withSystemd = false;
       libinput = libinput';
-    };
-  });
+    }
+  );
 
-  sway' = pkgs.sway.override (lib.optionalAttrs config.services.mdevd.enable {
-    sway-unwrapped = pkgs.sway-unwrapped.override {
-      systemdSupport = false;
+  labwc' = pkgs.labwc.override (
+    lib.optionalAttrs config.services.mdevd.enable {
       libinput = libinput';
-
-      wlroots = pkgs.wlroots.override {
+      wlroots_0_19 = pkgs.wlroots_0_19.override {
         libinput = libinput';
       };
-    };
-  });
+    }
+  );
 
-  hyprland' = pkgs.hyprland.override (lib.optionalAttrs config.services.mdevd.enable {
-    aquamarine = aquamarine';
-    libinput = libinput';
-    withSystemd = false;
-  });
+  sway' = pkgs.sway.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      sway-unwrapped = pkgs.sway-unwrapped.override {
+        systemdSupport = false;
+        libinput = libinput';
 
-  waybar' = (pkgs.waybar.overrideAttrs (o: {
-    patches = o.patches or [ ] ++ lib.optionals config.services.mdevd.enable [
-      (pkgs.fetchpatch {
-        url = "https://github.com/Alexays/Waybar/commit/bef35e48fe8b38aa1cfb67bc25bf7ae42c2ffd4b.patch";
-        hash = "sha256-3pSQe4JfqLDIocHRXgngVcHd6aa6gmY5gIdIVphEgrw=";
-      })
-    ];
-  })).override (lib.optionalAttrs config.services.mdevd.enable {
-    systemdSupport = false;
-    udev = pkgs.libudev-zero;
-  });
+        wlroots = pkgs.wlroots.override {
+          libinput = libinput';
+        };
+      };
+    }
+  );
+
+  hyprland' = pkgs.hyprland.override (
+    lib.optionalAttrs config.services.mdevd.enable {
+      aquamarine = aquamarine';
+      libinput = libinput';
+      withSystemd = false;
+    }
+  );
+
+  waybar' =
+    (pkgs.waybar.overrideAttrs (o: {
+      patches =
+        o.patches or [ ]
+        ++ lib.optionals config.services.mdevd.enable [
+          (pkgs.fetchpatch {
+            url = "https://github.com/Alexays/Waybar/commit/bef35e48fe8b38aa1cfb67bc25bf7ae42c2ffd4b.patch";
+            hash = "sha256-3pSQe4JfqLDIocHRXgngVcHd6aa6gmY5gIdIVphEgrw=";
+          })
+        ];
+    })).override
+      (
+        lib.optionalAttrs config.services.mdevd.enable {
+          systemdSupport = false;
+          udev = pkgs.libudev-zero;
+        }
+      );
 in
 {
   imports = [
@@ -81,9 +112,14 @@ in
     ./sops
     ./pam.nix
     ./test.nix
-
-    ./limine.nix
   ];
+
+  boot.loader.efi.canTouchEfiVariables = true;
+
+  programs.limine.enable = true;
+  programs.limine.settings = {
+    default_entry = 2;
+  };
 
   providers.scheduler.backend = lib.mkForce "fcron";
 
@@ -109,23 +145,33 @@ in
 
   # TODO: grub.sh doesn't read boot.kernelParams yet
   boot.kernelParams = [
+    "loglevel=1"
+
     # https://community.frame.work/t/linux-battery-life-tuning/6665/156
     "nvme.noacpi=1"
   ];
 
   # TODO: options for nix remote builders
-  environment.etc."nix/machines".enable = true;
-  environment.etc."nix/machines".text = lib.concatMapStringsSep "\n" (v: "ssh://${v}.node x86_64-linux - 20 2 benchmark,big-parallel - -") [
-    "arche"
-    "callisto"
-    "europa"
-    "helike"
-    "herse"
-    "kore"
-    "metis"
-  ];
+  environment.etc."nix/machines".enable = false;
+  environment.etc."nix/machines".text =
+    lib.concatMapStringsSep "\n" (v: "ssh://${v}.node x86_64-linux - 20 2 benchmark,big-parallel - -")
+      [
+        "arche"
+        "callisto"
+        "europa"
+        "helike"
+        "herse"
+        "kore"
+        "metis"
+      ];
   finit.services.nix-daemon.env = pkgs.writeText "nix-daemon.env" ''
-    PATH="${lib.makeBinPath [ config.services.nix-daemon.package pkgs.util-linux config.services.openssh.package ]}:$PATH"
+    PATH="${
+      lib.makeBinPath [
+        config.services.nix-daemon.package
+        pkgs.util-linux
+        config.services.openssh.package
+      ]
+    }:$PATH"
     CURL_CA_BUNDLE=${config.security.pki.caBundle}
   '';
 
@@ -136,28 +182,28 @@ in
   sops.secrets."aaron/password".neededForUsers = true;
   # sops.secrets."dev0-hetz/bastion" = { };
 
-#   providers.generator.files = {
-#     ssh_config = {
-#       file = pkgs.writeText "ssh_config" ''
-#         Host dev0-hetz
-#           HostName ${config.providers.generator.values."dev0-hetz/bastion"}
-#           # IdentityFile ~/.ssh/id_ed25519
-#           IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
-#           Port 443
-#           User aanderse
-#
-#         Host arche.node
-#           HostName arche.node
-#           ProxyJump dev0-hetz
-#           # IdentityFile ~/.ssh/id_ed25519
-#           IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
-#           User aanderse
-#       '';
-#
-#       path = "/etc/ssh/ssh_config";
-#       mode = "0444";
-#     };
-#   };
+  # providers.generator.files = {
+  #   ssh_config = {
+  #     file = pkgs.writeText "ssh_config" ''
+  #       Host dev0-hetz
+  #         HostName ${config.providers.generator.values."dev0-hetz/bastion"}
+  #         # IdentityFile ~/.ssh/id_ed25519
+  #         IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
+  #         Port 443
+  #         User aanderse
+  #
+  #       Host arche.node
+  #         HostName arche.node
+  #         ProxyJump dev0-hetz
+  #         # IdentityFile ~/.ssh/id_ed25519
+  #         IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
+  #         User aanderse
+  #     '';
+  #
+  #     path = "/etc/ssh/ssh_config";
+  #     mode = "0444";
+  #   };
+  # };
 
   # programs.ssh.extraConfig = with config.generators; ''
   #   Host dev0-hetz
@@ -165,17 +211,25 @@ in
   # '';
 
   networking.hostName = "framework";
+  networking.hostId = "a3c6de71";
 
   finit.runlevel = 3;
 
   finit.tasks.charge-limit.command = "${lib.getExe pkgs.framework-tool} --charge-limit 80";
   finit.tasks.nftables.command = "${lib.getExe pkgs.nftables} -f /etc/nftables.rules";
 
+  # finit.services.dinit-user-spawn = {
+  #   command = pkgs.callPackage ./dinit-user-spawn.nix { };
+  #   runlevels = "234";
+  #   conditions = "service/syslogd/ready";
+  #   cgroup.name = "user";
+  #   log = true;
+  # };
+
   finit.services.wifid = {
     command = pkgs.callPackage ./wifid/package.nix { };
     log = true;
   };
-
 
   # TODO: create a base system profile
   services.atd.enable = true;
@@ -188,8 +242,10 @@ in
   services.nix-daemon.enable = true;
   services.nix-daemon.nrBuildUsers = 32;
   services.nix-daemon.settings = {
-    # experimental-features = [ "flakes" "nix-command" ];
-    experimental-features = [ "nix-command" "pipe-operators" ];
+    experimental-features = [
+      "nix-command"
+      "pipe-operators"
+    ];
     download-buffer-size = 524288000;
     fallback = true;
     log-lines = 25;
@@ -199,7 +255,10 @@ in
 
     substituters = [ "https://jovian-nixos.cachix.org" ];
     trusted-public-keys = [ "jovian-nixos.cachix.org-1:mAWLjAxLNlfxAnozUjOqGj4AxQwCl7MXwOfu7msVlAo=" ];
-    trusted-users = [ "root" "@wheel" ];
+    trusted-users = [
+      "root"
+      "@wheel"
+    ];
   };
   services.openssh.enable = false;
   services.dropbear.enable = true;
@@ -267,6 +326,7 @@ in
   programs.fish.enable = true;
   programs.virtualbox.enable = true;
   programs.brightnessctl.enable = true;
+  programs.sudo.enable = true;
 
   # https://forums.virtualbox.org/viewtopic.php?p=556540#p556540
   environment.etc."modprobe.d/blacklist-kvm.conf".text = ''
@@ -289,7 +349,11 @@ in
         enableXWayland = false;
       };
     };
-    extraArgs = [ "-s" "-m" "last" ];
+    extraArgs = [
+      "-s"
+      "-m"
+      "last"
+    ];
     environment = {
       XKB_DEFAULT_LAYOUT = "us";
       XKB_DEFAULT_VARIANT = "dvorak";
@@ -332,6 +396,32 @@ in
 
   # misc
   services.fprintd.enable = true;
+
+  # TODO: now we're hijacking `env` and no one else can use it...
+  finit.services.fprintd.env = pkgs.writeText "fprintd.env" (
+    ''
+      NO_COLOR=1
+    ''
+    + lib.optionalString config.services.fprintd.debug ''
+      G_MESSAGES_DEBUG=all
+    ''
+  );
+  # services.fprintd.package = pkgs.fprintd.override {
+  #   glib = pkgs.glib.overrideAttrs (finalAttrs: rec {
+  #     version = "2.87.0";
+  #     src = pkgs.fetchurl {
+  #       url = "mirror://gnome/sources/glib/${lib.versions.majorMinor version}/glib-${version}.tar.xz";
+  #       hash = "sha256-kmz3PY65DqNBzC1vx7JYkB4aCGo4CLFmtEdtaamLJAE=";
+  #     };
+  #     patches = finalAttrs.patches ++ [
+  #       (pkgs.fetchpatch {
+  #         url = "https://gitlab.gnome.org/GNOME/glib/commit/a53df3a4b8668196c4538442c702fe40492d54ae.patch";
+  #         sha256 = "sha256-1jzBcnqcPUnffPHhdTybIplgj7Grqil3cb1TOYVGcLs=";
+  #       })
+  #       ./glib-2.patch
+  #     ];
+  #   });
+  # };
   services.fstrim.enable = true;
   services.zfs.autoSnapshot.enable = true;
   services.zfs.autoSnapshot.flags = "-k -p --utc";
@@ -427,18 +517,31 @@ in
   '';
 
   providers.privileges.rules = [
-    { command = "/run/current-system/sw/bin/poweroff";
+    {
+      command = "/run/current-system/sw/bin/poweroff";
       users = [ "aaron" ];
       requirePassword = false;
     }
-    { command = "/run/current-system/sw/bin/reboot";
+    {
+      command = "/run/current-system/sw/bin/reboot";
       users = [ "aaron" ];
       requirePassword = false;
     }
-  ] ++ lib.optionals config.services.mdevd.enable [
+  ]
+  ++ lib.optionals config.services.mdevd.enable [
     {
       command = "/run/current-system/sw/bin/pm-suspend";
-      groups = [ config.services.seatd.group] ;
+      groups = [ config.services.seatd.group ];
+      requirePassword = false;
+    }
+    {
+      command = "/run/current-system/sw/bin/zzz";
+      groups = [ config.services.seatd.group ];
+      requirePassword = false;
+    }
+    {
+      command = "/run/current-system/sw/bin/ZZZ";
+      groups = [ config.services.seatd.group ];
       requirePassword = false;
     }
   ];
@@ -466,13 +569,14 @@ in
     pkgs.wireless-regdb
   ];
 
+  users.users.root.passwordFile = config.sops.secrets."aaron/password".path;
   users.users.aaron = {
     isNormalUser = true;
     shell = pkgs.fish;
     passwordFile = config.sops.secrets."aaron/password".path;
     group = "users";
     home = "/home/aaron";
-    createHome =  true;
+    createHome = true;
 
     extraGroups = [
       config.hardware.i2c.group
@@ -493,6 +597,8 @@ in
   ];
 
   environment.systemPackages = [
+    pkgs.finix-rebuild
+
     pkgs.alacritty
     pkgs.bzmenu
     pkgs.ddcutil
@@ -506,9 +612,14 @@ in
     pkgs.pwmenu
     pkgs.swaybg
     pkgs.swayidle
-    pkgs.walker pkgs.fuzzel
+    pkgs.walker
     waybar'
 
+    pkgs.mailutils
+    pkgs.man
+    pkgs.nano
+    # (most of) these tools can/should be moved into a local profile - but kept in sync with <nixpkgs> ideally
+    pkgs.delta
     pkgs.direnv
     pkgs.dnsutils
     pkgs.git
@@ -517,15 +628,14 @@ in
     pkgs.lnav
     pkgs.jq
     pkgs.lon
-    pkgs.mailutils
-    pkgs.man
     pkgs.micro
-    pkgs.nano
     pkgs.ncdu
     pkgs.nix-diff
     pkgs.nix-output-monitor
     pkgs.nix-top
+    pkgs.nix-tree
     pkgs.nixd
+    pkgs.python3Packages.python-lsp-server
     pkgs.sops
     pkgs.ssh-to-age
     pkgs.tree
@@ -549,9 +659,10 @@ in
     pkgs.tdf
     (pkgs.vscode-with-extensions.override {
       vscodeExtensions = with pkgs.vscode-extensions; [
-        Google.gemini-cli-vscode-ide-companion
+        anthropic.claude-code
         mkhl.direnv
         ms-python.python
+        ms-vscode-remote.remote-ssh
         rust-lang.rust-analyzer
       ];
     })
@@ -590,7 +701,6 @@ in
     pkgs.nettools
     pkgs.nftables
 
-
     pkgs.bustle
     pkgs.d-spy
     pkgs.dconf-editor
@@ -599,8 +709,6 @@ in
     pkgs.perl
     pkgs.strace
     pkgs.tcl-9_0
-
-    pkgs.nix-tree
 
     pkgs.hicolor-icon-theme # TODO: xdg.icon module
     pkgs.catppuccin-cursors.mochaLight
@@ -611,17 +719,16 @@ in
     pkgs.e2fsprogs
     pkgs.kbd
 
-    # TODO: grub module
-    pkgs.efibootmgr
-    pkgs.grub2_efi
-
-
     pkgs.rink
     pkgs.libqalculate
 
     pkgs.imv # TODO: set as default image viewer
 
-    (kodi'.withPackages (p: [ p.jellyfin p.jellycon p.a4ksubtitles ]))
+    (kodi'.withPackages (p: [
+      p.jellyfin
+      p.jellycon
+      p.a4ksubtitles
+    ]))
 
     # TODO: add `programs.ssh.*` options
     pkgs.openssh

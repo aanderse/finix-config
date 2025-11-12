@@ -1,16 +1,20 @@
 let
   inherit (pkgs) lib;
 
-  pkgs = import <nixpkgs> {
+  sources = import ./lon.nix;
+
+  finix = import sources.finix;
+
+  pkgs = import sources.nixpkgs {
     system = "x86_64-linux";
 
     config.allowUnfree = true;
     overlays = [
-      (import <finix/overlays>)
-      (import <finix/overlays/modular-services.nix>)
+      finix.overlays.default
+      finix.overlays.modular-services
 
       (final: prev: {
-        inherit (import <sops-nix> { pkgs = final; }) sops-install-secrets;
+        inherit (import sources.sops-nix { pkgs = final; }) sops-install-secrets;
       })
 
       (final: prev: {
@@ -24,77 +28,65 @@ let
       })
     ];
   };
-
-  modules = lib.attrValues {
-    inherit (import <finix/modules>)
-      # required for evaluation
-      default
-      dbus
-      elogind
-      mdevd
-      privileges
-      scheduler
-      seatd
-      tmpfiles
-      udev
-
-      anacron
-      atd
-      bash
-      bluetooth
-      brightnessctl
-      chronyd
-      ddccontrol
-      dropbear
-      fcron
-      fish
-      fprintd
-      fstrim
-      fwupd
-      getty
-      gnome-keyring
-      greetd
-      hyprlock
-      incus
-      iwd
-      labwc
-      mariadb
-      niri
-      nix-daemon
-      nzbget
-      openresolv
-      openssh
-      polkit
-      power-profiles-daemon
-      regreet
-      rtkit
-      seahorse
-      sysklogd
-      system76-scheduler
-      tzupdate
-      upower
-      uptime-kuma
-      virtualbox
-      xwayland-satellite
-      zerotierone
-      zfs
-
-      # testing
-      hyprland
-      sway
-    ;
-  };
-
-  os = lib.evalModules {
-    specialArgs = {
-      modulesPath = toString <nixpkgs/nixos/modules>;
-    };
-
-    modules = [
-      { nixpkgs.pkgs = pkgs; }
-      ./configuration.nix
-      <nixpkgs/nixos/modules/programs/xfconf.nix>
-    ] ++ modules;
-  };
 in
-  os.config.system.topLevel
+finix.lib.finixSystem {
+  inherit lib;
+
+  specialArgs = {
+    modulesPath = toString sources.nixpkgs + "/nixos/modules";
+  };
+
+  modules = with finix.nixosModules; [
+    { nixpkgs.pkgs = pkgs; }
+    ./configuration.nix
+    (toString sources.nixpkgs + "/nixos/modules/programs/xfconf.nix")
+
+    # TODO: rename to resolvconf and make a required module? ... or... just have modules which need this import it? but then how to let downstream users replace it? doesn't seem great
+    openresolv
+
+    anacron
+    atd
+    bash
+    bluetooth
+    brightnessctl
+    chronyd
+    ddccontrol
+    dropbear
+    fcron
+    fish
+    fprintd
+    fstrim
+    fwupd
+    getty
+    gnome-keyring
+    greetd
+    hyprland
+    hyprlock
+    incus
+    iwd
+    labwc
+    limine
+    mariadb
+    niri
+    nix-daemon
+    nzbget
+    openssh
+    polkit
+    power-profiles-daemon
+    regreet
+    rtkit
+    seahorse
+    sudo
+    sway
+    sysklogd
+    system76-scheduler
+    tzupdate
+    upower
+    uptime-kuma
+    virtualbox
+    xwayland-satellite
+    zerotierone
+    zfs
+    # zzz
+  ];
+}

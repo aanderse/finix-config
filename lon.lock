@@ -7,9 +7,9 @@
       "owner": "finix-community",
       "repo": "finix",
       "branch": "main",
-      "revision": "7f4e52847bbe9ca8118e1039b36deb13b085a5a8",
-      "url": "https://github.com/finix-community/finix/archive/7f4e52847bbe9ca8118e1039b36deb13b085a5a8.tar.gz",
-      "hash": "sha256-xV2Q6KqIHY8jQLJbhAIq7otu+xVohz3fU2doq6yD5yo="
+      "revision": "b9f859d58d3dc4e2b53a6b5c6a42c5d1a991db32",
+      "url": "https://github.com/finix-community/finix/archive/b9f859d58d3dc4e2b53a6b5c6a42c5d1a991db32.tar.gz",
+      "hash": "sha256-gjfls1ZaKttYQ1eMvv72LWuE8JAzNaMTuZ75VyJOlL8="
     },
     "nixpkgs": {
       "type": "GitHub",
