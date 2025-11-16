@@ -23,13 +23,6 @@ let
     }
   );
 
-  aquamarine' = pkgs.aquamarine.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      libinput = libinput';
-      udev = pkgs.libudev-zero;
-    }
-  );
-
   kodi' = pkgs.kodi.override (
     lib.optionalAttrs config.services.mdevd.enable {
       udev = pkgs.libudev-zero;
@@ -37,54 +30,6 @@ let
       libcec = pkgs.libcec.override {
         udev = pkgs.libudev-zero;
       };
-    }
-  );
-
-  libinput' =
-    (pkgs.libinput.override {
-      udev = pkgs.libudev-zero;
-    }).overrideAttrs
-      (o: {
-        mesonFlags = (o.mesonFlags or [ ]) ++ [
-          "-Dlibwacom=false"
-        ];
-      });
-
-  niri' = pkgs.niri.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      eudev = pkgs.libudev-zero;
-      withSystemd = false;
-      libinput = libinput';
-    }
-  );
-
-  labwc' = pkgs.labwc.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      libinput = libinput';
-      wlroots_0_19 = pkgs.wlroots_0_19.override {
-        libinput = libinput';
-      };
-    }
-  );
-
-  sway' = pkgs.sway.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      sway-unwrapped = pkgs.sway-unwrapped.override {
-        systemdSupport = false;
-        libinput = libinput';
-
-        wlroots = pkgs.wlroots.override {
-          libinput = libinput';
-        };
-      };
-    }
-  );
-
-  hyprland' = pkgs.hyprland.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      aquamarine = aquamarine';
-      libinput = libinput';
-      withSystemd = false;
     }
   );
 
@@ -133,8 +78,6 @@ in
   services.anacron.settings = {
     NO_MAIL_OUTPUT = 1;
   };
-
-  programs.xfconf.enable = true;
 
   security.pam.environment = {
     SSH_ASKPASS.default = "${pkgs.seahorse}/libexec/seahorse/ssh-askpass";
@@ -236,6 +179,8 @@ in
   services.chrony.enable = true;
   services.fcron.enable = true;
   services.dbus.enable = true;
+  services.earlyoom.enable = true;
+  services.earlyoom.debug = true;
   services.fwupd.enable = true;
   services.fwupd.debug = false;
   services.iwd.enable = true;
@@ -327,6 +272,7 @@ in
   programs.virtualbox.enable = true;
   programs.brightnessctl.enable = true;
   programs.sudo.enable = true;
+  programs.zzz.enable = true;
 
   # https://forums.virtualbox.org/viewtopic.php?p=556540#p556540
   environment.etc."modprobe.d/blacklist-kvm.conf".text = ''
@@ -342,13 +288,6 @@ in
   services.ddccontrol.enable = true;
   programs.regreet.enable = true;
   programs.regreet.compositor = {
-    package = pkgs.cage.override {
-      wlroots_0_19 = pkgs.wlroots_0_19.override {
-        libinput = libinput';
-
-        enableXWayland = false;
-      };
-    };
     extraArgs = [
       "-s"
       "-m"
@@ -360,14 +299,10 @@ in
     };
   };
   programs.niri.enable = true;
-  programs.niri.package = niri';
   programs.hyprlock.enable = true;
   programs.hyprland.enable = true;
-  programs.hyprland.package = hyprland';
   programs.sway.enable = true;
-  programs.sway.package = sway';
   programs.labwc.enable = true;
-  programs.labwc.package = labwc';
   programs.gnome-keyring.enable = true;
   programs.seahorse.enable = true;
   programs.xwayland-satellite.enable = true;
@@ -704,7 +639,6 @@ in
     pkgs.bustle
     pkgs.d-spy
     pkgs.dconf-editor
-    libinput'
 
     pkgs.perl
     pkgs.strace
