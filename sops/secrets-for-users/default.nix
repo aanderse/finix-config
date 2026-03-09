@@ -28,7 +28,7 @@ in
 {
   system.activation.scripts = lib.mkIf (secretsForUsers != { }) {
     setupSecretsForUsers =
-      lib.stringAfter ([ "specialfs" ] ++ lib.optional cfg.age.generateKey "generate-age-key") ''
+      lib.stringAfter (lib.optional cfg.age.generateKey "generate-age-key") ''
         [ -e /run/current-system ] || echo setting up secrets for users...
         ${withEnvironment "${cfg.package}/bin/sops-install-secrets -ignore-passwd ${manifestForUsers}"}
       ''

@@ -1,0 +1,16 @@
+--- a/Modules/Panels/Settings/Tabs/About/VersionSubTab.qml
++++ b/Modules/Panels/Settings/Tabs/About/VersionSubTab.qml
+@@ -354,10 +354,12 @@ import qs.Widgets
+     Layout.alignment: Qt.AlignHCenter
+     spacing: Style.marginXL
+
+-    // Noctalia logo
++    // Distro logo (with Noctalia fallback)
+     Image {
+-      source: "../../../../../Assets/noctalia.svg"
++      source: HostService.osLogo && HostService.osLogo !== ""
++              ? HostService.osLogo
++              : "../../../../../Assets/noctalia.svg"
+       width: 96 * Style.uiScaleRatio
+       height: width
+       fillMode: Image.PreserveAspectFit

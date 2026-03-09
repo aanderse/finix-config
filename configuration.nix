@@ -14,7 +14,7 @@ let
     )).overrideAttrs
       (o: {
         # https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/2398#note_2967898
-        patches = o.patches or [ ] ++ [ ./pipewire.patch ];
+        patches = o.patches or [ ] ++ lib.optionals config.services.mdevd.enable [ ./pipewire.patch ];
       });
 
   wireplumber' = pkgs.wireplumber.override (
@@ -23,7 +23,7 @@ let
     }
   );
 
-  kodi' = pkgs.kodi.override (
+  kodi' = pkgs.kodi-wayland.override (
     lib.optionalAttrs config.services.mdevd.enable {
       udev = pkgs.libudev-zero;
 
@@ -32,51 +32,64 @@ let
       };
     }
   );
-
-  waybar' =
-    (pkgs.waybar.overrideAttrs (o: {
-      patches =
-        o.patches or [ ]
-        ++ lib.optionals config.services.mdevd.enable [
-          (pkgs.fetchpatch {
-            url = "https://github.com/Alexays/Waybar/commit/bef35e48fe8b38aa1cfb67bc25bf7ae42c2ffd4b.patch";
-            hash = "sha256-3pSQe4JfqLDIocHRXgngVcHd6aa6gmY5gIdIVphEgrw=";
-          })
-        ];
-    })).override
-      (
-        lib.optionalAttrs config.services.mdevd.enable {
-          systemdSupport = false;
-          udev = pkgs.libudev-zero;
-        }
-      );
 in
 {
   imports = [
     ./hardware-configuration.nix
     ./sops
     ./pam.nix
-    ./test.nix
+    # ./podman.nix
   ];
+
+  # experiment with network namespace support for finix
+  # finit.ttys.tty1.extraConfig = "netns:zerotier";
+  # finit.services.zerotierone.extraConfig = "netns:zerotier";
+  # boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
+  # finit.package = pkgs.finit.overrideAttrs (finalAttrs: {
+  #   patches = finalAttrs.patches or [ ] ++ [ /home/aaron/code/finit/netns-support.patch ];
+  # });
+
+  # wip - cups module
+  # services.cups.enable = true;
+
+  # experiment with user level service manager... dinit
+  # finit.services.dinit-user-spawn = {
+  #   command = pkgs.callPackage ./dinit-user-spawn.nix { };
+  #   runlevels = "234";
+  #   conditions = "service/syslogd/ready";
+  #   cgroup.name = "user";
+  #   log = true;
+  # };
+
+  specialisation.udev = {
+    services.mdevd.enable = lib.mkForce false;
+    services.udev.enable = lib.mkForce true;
+  };
+
+  specialisation.elogind = {
+    services.mdevd.enable = lib.mkForce false;
+    services.udev.enable = lib.mkForce true;
+
+    services.elogind.enable = lib.mkForce true;
+    services.seatd.enable = lib.mkForce false;
+  };
 
   boot.loader.efi.canTouchEfiVariables = true;
 
   programs.limine.enable = true;
-  programs.limine.settings = {
-    default_entry = 2;
-  };
+  programs.limine.settings.editor_enabled = true;
 
-  providers.scheduler.backend = lib.mkForce "fcron";
+  programs.noisetorch.enable = true;
+  programs.pmount.enable = true;
 
-  services.cron.enable = true;
-  services.cron.extraArgs = [ "-s" ];
-  services.cron.settings = {
-    RANDOM_DELAY = 10;
-  };
-
-  services.anacron.enable = true;
-  services.anacron.settings = {
-    NO_MAIL_OUTPUT = 1;
+  programs.dma.enable = true;
+  programs.dma.settings = {
+    SMARTHOST = "smtp.fastmail.com";
+    PORT = 465;
+    MASQUERADE = "aaron@fosslib.net";
+    SECURETRANSFER = true;
+    VERIFYCERT = true;
+    AUTHPATH = "/etc/dma/auth.conf";
   };
 
   security.pam.environment = {
@@ -86,7 +99,13 @@ in
     LIBVA_DRIVER_NAME.default = "iHD";
   };
 
-  # TODO: grub.sh doesn't read boot.kernelParams yet
+  # TODO: some sort of option i guess
+  environment.etc."security/limits.conf".text = ''
+    @audio   -   rtprio     95
+    @audio   -   nice       -19
+    @audio   -   memlock    4194304
+  '';
+
   boot.kernelParams = [
     "loglevel=1"
 
@@ -105,84 +124,59 @@ in
         "helike"
         "herse"
         "kore"
-        "metis"
+        # "metis"
       ];
-  finit.services.nix-daemon.env = pkgs.writeText "nix-daemon.env" ''
-    PATH="${
-      lib.makeBinPath [
-        config.services.nix-daemon.package
-        pkgs.util-linux
-        config.services.openssh.package
-      ]
-    }:$PATH"
-    CURL_CA_BUNDLE=${config.security.pki.caBundle}
-  '';
+
+  finit.services.nix-daemon.environment.CURL_CA_BUNDLE = config.security.pki.caBundle;
+  finit.services.nix-daemon.path = [
+    config.services.nix-daemon.package
+    pkgs.util-linux
+    config.services.openssh.package
+  ];
 
   sops.validateSopsFiles = false;
   sops.defaultSopsFile = ./secrets.yaml;
   sops.age.sshKeyPaths = [ "/var/lib/sshd/ssh_host_ed25519_key" ];
 
   sops.secrets."aaron/password".neededForUsers = true;
-  # sops.secrets."dev0-hetz/bastion" = { };
-
-  # providers.generator.files = {
-  #   ssh_config = {
-  #     file = pkgs.writeText "ssh_config" ''
-  #       Host dev0-hetz
-  #         HostName ${config.providers.generator.values."dev0-hetz/bastion"}
-  #         # IdentityFile ~/.ssh/id_ed25519
-  #         IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
-  #         Port 443
-  #         User aanderse
-  #
-  #       Host arche.node
-  #         HostName arche.node
-  #         ProxyJump dev0-hetz
-  #         # IdentityFile ~/.ssh/id_ed25519
-  #         IdentityFile /home/aaron/.cache/tvbeat/.ssh/id_ed25519
-  #         User aanderse
-  #     '';
-  #
-  #     path = "/etc/ssh/ssh_config";
-  #     mode = "0444";
-  #   };
-  # };
-
-  # programs.ssh.extraConfig = with config.generators; ''
-  #   Host dev0-hetz
-  #     HostName ${values."dev0-hetz/bastion"}
-  # '';
 
   networking.hostName = "framework";
   networking.hostId = "a3c6de71";
 
+  networking.hosts = {
+    "linode" = [ "172.23.7.207" ];
+    "techiem2" = [ "172.23.193.205" ];
+  };
+
   finit.runlevel = 3;
 
-  finit.tasks.charge-limit.command = "${lib.getExe pkgs.framework-tool} --charge-limit 80";
-  finit.tasks.nftables.command = "${lib.getExe pkgs.nftables} -f /etc/nftables.rules";
-
-  # finit.services.dinit-user-spawn = {
-  #   command = pkgs.callPackage ./dinit-user-spawn.nix { };
-  #   runlevels = "234";
-  #   conditions = "service/syslogd/ready";
-  #   cgroup.name = "user";
-  #   log = true;
-  # };
+  finit.tasks.charge-limit = {
+    conditions = "service/syslogd/ready";
+    command = "${lib.getExe pkgs.framework-tool} --charge-limit 80";
+    log = true;
+  };
 
   finit.services.wifid = {
     command = pkgs.callPackage ./wifid/package.nix { };
     log = true;
+    nohup = true;
+    path = [ config.finit.package ];
   };
 
   # TODO: create a base system profile
   services.atd.enable = true;
   services.chrony.enable = true;
   services.fcron.enable = true;
+  services.fcron.systab = lib.mkBefore [ "MAILTO=aaron@fosslib.net" ];
   services.dbus.enable = true;
   services.earlyoom.enable = true;
-  services.earlyoom.debug = true;
+  services.earlyoom.extraArgs = [
+    "-r"
+    "3600"
+  ];
   services.fwupd.enable = true;
   services.fwupd.debug = false;
+  services.illum.enable = true;
   services.iwd.enable = true;
   services.nix-daemon.enable = true;
   services.nix-daemon.nrBuildUsers = 32;
@@ -198,8 +192,6 @@ in
     builders-use-substitutes = true;
     build-dir = "/var/tmp";
 
-    substituters = [ "https://jovian-nixos.cachix.org" ];
-    trusted-public-keys = [ "jovian-nixos.cachix.org-1:mAWLjAxLNlfxAnozUjOqGj4AxQwCl7MXwOfu7msVlAo=" ];
     trusted-users = [
       "root"
       "@wheel"
@@ -209,7 +201,6 @@ in
   services.dropbear.enable = true;
   finit.services.dropbear.conditions = [ "usr/with-an-e" ];
   services.sysklogd.enable = true;
-  # services.udev.enable = true;
   services.mdevd.enable = true;
   services.mdevd.nlgroups = 4;
   services.mdevd.debug = true;
@@ -250,10 +241,56 @@ in
       rfkill      root:${config.services.seatd.group} 660
     ''
   ];
+  services.nftables.enable = true;
+  services.nftables.configFile = pkgs.writeText "nftables.conf" ''
+    # https://wiki.nftables.org/wiki-nftables/index.php/Quick_reference-nftables_in_10_minutes#Simple_IP/IPv6_Firewall
+
+    flush ruleset
+
+    table firewall {
+      chain incoming {
+        type filter hook input priority 0; policy drop;
+
+        # established/related connections
+        ct state established,related accept
+
+        # loopback interface
+        iifname lo accept
+
+        # icmp
+        icmp type echo-request accept
+
+        # open tcp ports: sshd (22), http-alt (8080)
+        tcp dport { 22, 8080 } accept
+      }
+    }
+
+    table ip6 firewall {
+      chain incoming {
+        type filter hook input priority 0; policy drop;
+
+        # established/related connections
+        ct state established,related accept
+
+        # invalid connections
+        ct state invalid drop
+
+        # loopback interface
+        iifname lo accept
+
+        # icmp
+        # routers may also want: mld-listener-query, nd-router-solicit
+        icmpv6 type { echo-request, nd-neighbor-solicit } accept
+
+        # open tcp ports: sshd (22), http-alt (8080)
+        tcp dport { 22, 8080 } accept
+      }
+    }
+  '';
   services.polkit.enable = true;
 
-  programs.openresolv.enable = true;
-  programs.openresolv.package = pkgs.openresolv.overrideAttrs (_: {
+  programs.resolvconf.enable = true;
+  programs.resolvconf.package = pkgs.openresolv.overrideAttrs (_: {
     # TODO: could potentially make 'RESTARTCMD' an overridable option for the package
     configurePhase = ''
       cat > config.mk <<EOF
@@ -289,6 +326,7 @@ in
   programs.regreet.enable = true;
   programs.regreet.compositor = {
     extraArgs = [
+      "-d"
       "-s"
       "-m"
       "last"
@@ -316,8 +354,8 @@ in
       execsnoop true
 
       assignments {
-        // nix-daemon io=(best-effort)4 sched="batch" {
-        nix-daemon io=(idle)4 sched="idle" {
+        // Keep nix-daemon deprioritized as a backup
+        nix-daemon io=(idle)4 sched="idle" nice=19 {
           include cgroup="/system/nix-daemon"
         }
       }
@@ -326,37 +364,12 @@ in
 
   finit.services.nix-daemon.cgroup.settings = {
     "cpu.max" = "800000 100000";
-    "cpu.weight" = 80;
+    "cpu.weight" = 50;
+    "io.weight" = 50;
   };
 
   # misc
   services.fprintd.enable = true;
-
-  # TODO: now we're hijacking `env` and no one else can use it...
-  finit.services.fprintd.env = pkgs.writeText "fprintd.env" (
-    ''
-      NO_COLOR=1
-    ''
-    + lib.optionalString config.services.fprintd.debug ''
-      G_MESSAGES_DEBUG=all
-    ''
-  );
-  # services.fprintd.package = pkgs.fprintd.override {
-  #   glib = pkgs.glib.overrideAttrs (finalAttrs: rec {
-  #     version = "2.87.0";
-  #     src = pkgs.fetchurl {
-  #       url = "mirror://gnome/sources/glib/${lib.versions.majorMinor version}/glib-${version}.tar.xz";
-  #       hash = "sha256-kmz3PY65DqNBzC1vx7JYkB4aCGo4CLFmtEdtaamLJAE=";
-  #     };
-  #     patches = finalAttrs.patches ++ [
-  #       (pkgs.fetchpatch {
-  #         url = "https://gitlab.gnome.org/GNOME/glib/commit/a53df3a4b8668196c4538442c702fe40492d54ae.patch";
-  #         sha256 = "sha256-1jzBcnqcPUnffPHhdTybIplgj7Grqil3cb1TOYVGcLs=";
-  #       })
-  #       ./glib-2.patch
-  #     ];
-  #   });
-  # };
   services.fstrim.enable = true;
   services.zfs.autoSnapshot.enable = true;
   services.zfs.autoSnapshot.flags = "-k -p --utc";
@@ -366,7 +379,9 @@ in
   services.power-profiles-daemon.enable = true;
   services.zerotierone.enable = true;
   services.incus.enable = true;
-  finit.services.incusd.manual = true;
+  finit.services.incusd = lib.mkIf config.services.incus.enable {
+    manual = true;
+  };
 
   # NOTE: https://wiki.alpinelinux.org/wiki/Polkit#Using_polkit_with_seatd
   services.polkit.extraConfig = ''
@@ -420,8 +435,7 @@ in
   ];
 
   xdg.portal.portals = [
-    pkgs.xdg-desktop-portal-hyprland
-    pkgs.xdg-desktop-portal-wlr
+    pkgs.xdg-desktop-portal-gnome
     pkgs.xdg-desktop-portal-gtk
   ];
 
@@ -487,21 +501,8 @@ in
 
   hardware.firmware = with pkgs; [
     linux-firmware
-    intel2200BGFirmware
-    rtl8192su-firmware
-    rt5677-firmware
-    rtl8761b-firmware
-    zd1211fw
-    alsa-firmware
     sof-firmware
-    libreelec-dvb-firmware
-
-    broadcom-bt-firmware
-    b43Firmware_5_1_138
-    b43Firmware_6_30_163_46
-    xow_dongle-firmware
-
-    pkgs.wireless-regdb
+    wireless-regdb
   ];
 
   users.users.root.passwordFile = config.sops.secrets."aaron/password".path;
@@ -519,7 +520,32 @@ in
       "audio"
       "incus-admin"
       "input"
+      "kvm"
       "vboxusers"
+      "video"
+      "wheel"
+    ];
+  };
+
+  environment.etc.subuid.mode = "0444";
+  environment.etc.subgid.mode = "0444";
+
+  environment.etc.subuid.text = "aaron:100000:65536";
+  environment.etc.subgid.text = "aaron:100000:65536";
+
+  users.users.test = {
+    isNormalUser = true;
+    shell = pkgs.fish;
+    passwordFile = config.sops.secrets."aaron/password".path;
+    group = "users";
+    home = "/home/test";
+    createHome = true;
+
+    extraGroups = [
+      config.hardware.i2c.group
+      config.services.seatd.group
+      "audio"
+      "input"
       "video"
       "wheel"
     ];
@@ -532,23 +558,28 @@ in
   ];
 
   environment.systemPackages = [
-    pkgs.finix-rebuild
+    pkgs.slurp # needed for xdg-desktop-portal-luminous?
+    pkgs.starship # TODO: move to personal config
+    (pkgs.noctalia-shell.overrideAttrs (oldAttrs: {
+      patches = (oldAttrs.patches or [ ]) ++ [
+        ./noctalia-shell-distro-logo.patch
+      ];
+    })) # TODO: move to personal config??
+    pkgs.mob # TODO: move to personal config
+    pkgs.fresh-editor # TODO: move to personal config
+    pkgs.pamtester # temporary, testing
+    pkgs.asciinema # TODO: move to personal config
+    pkgs.syncthing # TODO: move to personal config?
+    pkgs.claude-code # TODO: move to personal config
+    pkgs.fastfetch
+    pkgs.nixos-rebuild-ng
 
-    pkgs.alacritty
-    pkgs.bzmenu
     pkgs.ddcutil
     pkgs.dex
     pkgs.ghostty
-    pkgs.iwmenu
     pkgs.kanshi
-    pkgs.mako
     pkgs.musikcube
-    pkgs.playerctl
-    pkgs.pwmenu
-    pkgs.swaybg
     pkgs.swayidle
-    pkgs.walker
-    waybar'
 
     pkgs.mailutils
     pkgs.man
@@ -562,7 +593,7 @@ in
     pkgs.htop
     pkgs.lnav
     pkgs.jq
-    pkgs.lon
+    pkgs.nix-prefetch-git
     pkgs.micro
     pkgs.ncdu
     pkgs.nix-diff
@@ -570,6 +601,7 @@ in
     pkgs.nix-top
     pkgs.nix-tree
     pkgs.nixd
+    pkgs.nixfmt
     pkgs.python3Packages.python-lsp-server
     pkgs.sops
     pkgs.ssh-to-age
@@ -587,21 +619,31 @@ in
     pkgs.firefox
     pkgs.qbittorrent
     pkgs.steam
+    pkgs.steam.run
     pkgs.xarchiver
 
-    # pkgs.lite-xl # broken recently
     pkgs.marp-cli
     pkgs.tdf
     (pkgs.vscode-with-extensions.override {
       vscodeExtensions = with pkgs.vscode-extensions; [
-        anthropic.claude-code
+        # anthropic.claude-code
+        bbenoist.nix
+        jnoortheen.nix-ide
         mkhl.direnv
         ms-python.python
         ms-vscode-remote.remote-ssh
         rust-lang.rust-analyzer
-      ];
+      ]
+      # ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
+      #   {
+      #     name = "claude-code";
+      #     publisher = "anthropic";
+      #     version = "2.0.50";
+      #     hash = "sha256-Pd4rRLS613/zSn8Pvr/cozaIAqrG06lmUC6IxHm97XQ=";
+      #   }
+      # ]
+      ;
     })
-    pkgs.zed-editor
 
     pkgs.discord
     (pkgs.element-desktop.override { commandLineArgs = "--password-store=gnome-libsecret"; })
@@ -612,7 +654,7 @@ in
         pidgin-carbons
         pidgin-osd
         pidgin-window-merge
-        purple-plugin-pack
+        # purple-plugin-pack
       ];
     })
     pkgs.quasselClient
@@ -623,10 +665,9 @@ in
     pkgs.framework-tool
     pkgs.impala
     pkgs.libnotify
-    pkgs.mixxc
     pkgs.wiremix
     pipewire'
-    pkgs.pmutils
+    pkgs.pmutils # isn't zzz doing this now?
     wireplumber'
     pkgs.wl-clipboard
     pkgs.xdg-utils
@@ -634,7 +675,6 @@ in
     pkgs.iproute2
     pkgs.iputils
     pkgs.nettools
-    pkgs.nftables
 
     pkgs.bustle
     pkgs.d-spy
@@ -642,7 +682,6 @@ in
 
     pkgs.perl
     pkgs.strace
-    pkgs.tcl-9_0
 
     pkgs.hicolor-icon-theme # TODO: xdg.icon module
     pkgs.catppuccin-cursors.mochaLight
@@ -653,22 +692,19 @@ in
     pkgs.e2fsprogs
     pkgs.kbd
 
-    pkgs.rink
-    pkgs.libqalculate
-
     pkgs.imv # TODO: set as default image viewer
 
     (kodi'.withPackages (p: [
-      p.jellyfin
-      p.jellycon
       p.a4ksubtitles
+      p.jellycon
+      p.jellyfin
+      p.steam-library
     ]))
 
     # TODO: add `programs.ssh.*` options
     pkgs.openssh
   ];
 
-  hardware.console.keyMap = "us";
   hardware.graphics.enable = true;
   hardware.graphics.enable32Bit = true;
 

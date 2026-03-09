@@ -187,7 +187,7 @@ let
     #     ) config.services.openssh.hostKeys
     #   )
     # else
-      [ ];
+    [ ];
 in
 {
   options.sops = {
@@ -394,46 +394,55 @@ in
   ];
   config = lib.mkMerge [
     (lib.mkIf (cfg.secrets != { }) {
-      assertions =
-        [
-          {
-            assertion =
-              cfg.gnupg.home != null
-              || cfg.gnupg.sshKeyPaths != [ ]
-              || cfg.age.keyFile != null
-              || cfg.age.sshKeyPaths != [ ];
-            message = "No key source configured for sops. Either set services.openssh.enable or set sops.age.keyFile or sops.gnupg.home";
-          }
-          {
-            assertion = !(cfg.gnupg.home != null && cfg.gnupg.sshKeyPaths != [ ]);
-            message = "Exactly one of sops.gnupg.home and sops.gnupg.sshKeyPaths must be set";
-          }
-        ]
-        ++ lib.optionals cfg.validateSopsFiles (
-          lib.concatLists (
-            lib.mapAttrsToList (name: secret: [
-              {
-                assertion = secret.uid != null && secret.uid != 0 -> secret.owner == null;
-                message = "In ${secret.name} exactly one of sops.owner and sops.uid must be set";
-              }
-              {
-                assertion = secret.gid != null && secret.gid != 0 -> secret.group == null;
-                message = "In ${secret.name} exactly one of sops.group and sops.gid must be set";
-              }
-            ]) cfg.secrets
-          )
-        );
+      assertions = [
+        {
+          assertion =
+            cfg.gnupg.home != null
+            || cfg.gnupg.sshKeyPaths != [ ]
+            || cfg.age.keyFile != null
+            || cfg.age.sshKeyPaths != [ ];
+          message = "No key source configured for sops. Either set services.openssh.enable or set sops.age.keyFile or sops.gnupg.home";
+        }
+        {
+          assertion = !(cfg.gnupg.home != null && cfg.gnupg.sshKeyPaths != [ ]);
+          message = "Exactly one of sops.gnupg.home and sops.gnupg.sshKeyPaths must be set";
+        }
+      ]
+      ++ lib.optionals cfg.validateSopsFiles (
+        lib.concatLists (
+          lib.mapAttrsToList (name: secret: [
+            {
+              assertion = secret.uid != null && secret.uid != 0 -> secret.owner == null;
+              message = "In ${secret.name} exactly one of sops.owner and sops.uid must be set";
+            }
+            {
+              assertion = secret.gid != null && secret.gid != 0 -> secret.group == null;
+              message = "In ${secret.name} exactly one of sops.group and sops.gid must be set";
+            }
+          ]) cfg.secrets
+        )
+      );
 
       sops.environment.SOPS_GPG_EXEC = lib.mkIf (cfg.gnupg.home != null || cfg.gnupg.sshKeyPaths != [ ]) (
         lib.mkDefault "${pkgs.gnupg}/bin/gpg"
       );
+
+      # When using sysusers we no longer are started as an activation script because those are started in initrd while sysusers is started later.
+      # finit.run.sops-install-secrets = lib.mkIf (regularSecrets != { }) {
+      #   runlevels = "S1234578"; # wantedBy = [ "sysinit.target" ];
+      #   conditions = [ "task/userborn/success" "service/syslogd/running" ]; # iunno... # after = [ "systemd-sysusers.service" "userborn.service" ];
+      #   environment = cfg.environment;
+      #   path = cfg.age.plugins;
+      #
+      #   command = "${cfg.package}/bin/sops-install-secrets ${manifest}";
+      #   # RemainAfterExit = true;
+      # };
 
       system.activation.scripts = {
         setupSecrets = lib.mkIf (regularSecrets != { }) (
           lib.stringAfter
             (
               [
-                "specialfs"
                 "users"
                 "groups"
               ]
