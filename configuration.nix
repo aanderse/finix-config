@@ -22,16 +22,6 @@ let
       pipewire = pipewire';
     }
   );
-
-  kodi' = pkgs.kodi-wayland.override (
-    lib.optionalAttrs config.services.mdevd.enable {
-      udev = pkgs.libudev-zero;
-
-      libcec = pkgs.libcec.override {
-        udev = pkgs.libudev-zero;
-      };
-    }
-  );
 in
 {
   imports = [
@@ -39,7 +29,35 @@ in
     ./sops
     ./pam.nix
     # ./podman.nix
+    ./cups.nix
+    ./htpc.nix
   ];
+
+  services.flatpak.enable = true;
+  services.flatpak.extraGroups = lib.optionals (config.services.elogind.enable == false) [
+    config.services.seatd.group
+  ];
+
+  services.getty.package = pkgs.util-linux // {
+    meta.mainProgram = "agetty";
+  };
+
+  # programs.gamemode.enable = true;
+  # programs.gamemode.settings = {
+  #   custom = {
+  #     start = "${pkgs.libnotify}/bin/notify-send 'GameMode started'";
+  #     end = "${pkgs.libnotify}/bin/notify-send 'GameMode ended'";
+  #   };
+  # };
+
+  services.cups.enable = true;
+  services.cups.drivers = [ pkgs.brlaser ];
+
+  programs.plymouth.enable = true;
+
+  # hmmm...
+  finit.services.dropbear.conditions = [ "usr/with-an-e" ];
+  finit.services.cups.conditions = [ "usr/with-an-e" ];
 
   # experiment with network namespace support for finix
   # finit.ttys.tty1.extraConfig = "netns:zerotier";
@@ -49,8 +67,14 @@ in
   #   patches = finalAttrs.patches or [ ] ++ [ /home/aaron/code/finit/netns-support.patch ];
   # });
 
-  # wip - cups module
-  # services.cups.enable = true;
+  finit.package = pkgs.finit.overrideAttrs (finalAttrs: {
+    src = pkgs.fetchFromGitHub {
+      owner = "finit-project";
+      repo = "finit";
+      rev = "b0e672bc9a5502786e731994e5d415d2151612aa";
+      sha256 = "sha256-Ljhvw/YQOcPaqVJd9nAXCQqdJZIacRzDS/WQtk0MaP4=";
+    };
+  });
 
   # experiment with user level service manager... dinit
   # finit.services.dinit-user-spawn = {
@@ -64,6 +88,9 @@ in
   specialisation.udev = {
     services.mdevd.enable = lib.mkForce false;
     services.udev.enable = lib.mkForce true;
+
+    services.fwupd.enable = true;
+    services.udisks2.enable = true;
   };
 
   specialisation.elogind = {
@@ -72,29 +99,14 @@ in
 
     services.elogind.enable = lib.mkForce true;
     services.seatd.enable = lib.mkForce false;
+
+    services.fwupd.enable = true;
+    services.udisks2.enable = true;
   };
 
   boot.loader.efi.canTouchEfiVariables = true;
 
-  programs.limine.enable = true;
-  programs.limine.settings.editor_enabled = true;
-
-  programs.noisetorch.enable = true;
-  programs.pmount.enable = true;
-
-  programs.dma.enable = true;
-  programs.dma.settings = {
-    SMARTHOST = "smtp.fastmail.com";
-    PORT = 465;
-    MASQUERADE = "aaron@fosslib.net";
-    SECURETRANSFER = true;
-    VERIFYCERT = true;
-    AUTHPATH = "/etc/dma/auth.conf";
-  };
-
   security.pam.environment = {
-    SSH_ASKPASS.default = "${pkgs.seahorse}/libexec/seahorse/ssh-askpass";
-
     # https://wiki.nixos.org/wiki/Accelerated_Video_Playback#Intel
     LIBVA_DRIVER_NAME.default = "iHD";
   };
@@ -127,7 +139,6 @@ in
         # "metis"
       ];
 
-  finit.services.nix-daemon.environment.CURL_CA_BUNDLE = config.security.pki.caBundle;
   finit.services.nix-daemon.path = [
     config.services.nix-daemon.package
     pkgs.util-linux
@@ -174,8 +185,6 @@ in
     "-r"
     "3600"
   ];
-  services.fwupd.enable = true;
-  services.fwupd.debug = false;
   services.illum.enable = true;
   services.iwd.enable = true;
   services.nix-daemon.enable = true;
@@ -190,7 +199,7 @@ in
     log-lines = 25;
     warn-dirty = false;
     builders-use-substitutes = true;
-    build-dir = "/var/tmp";
+    # build-dir = "/var/tmp";
 
     trusted-users = [
       "root"
@@ -199,8 +208,8 @@ in
   };
   services.openssh.enable = false;
   services.dropbear.enable = true;
-  finit.services.dropbear.conditions = [ "usr/with-an-e" ];
   services.sysklogd.enable = true;
+  services.thermald.enable = true;
   services.mdevd.enable = true;
   services.mdevd.nlgroups = 4;
   services.mdevd.debug = true;
@@ -310,6 +319,19 @@ in
   programs.brightnessctl.enable = true;
   programs.sudo.enable = true;
   programs.zzz.enable = true;
+  programs.limine.enable = true;
+  programs.limine.settings.editor_enabled = true;
+  programs.noisetorch.enable = true;
+  programs.pmount.enable = true;
+  programs.dma.enable = true;
+  programs.dma.settings = {
+    SMARTHOST = "smtp.fastmail.com";
+    PORT = 465;
+    MASQUERADE = "aaron@fosslib.net";
+    SECURETRANSFER = true;
+    VERIFYCERT = true;
+    AUTHPATH = "/etc/dma/auth.conf";
+  };
 
   # https://forums.virtualbox.org/viewtopic.php?p=556540#p556540
   environment.etc."modprobe.d/blacklist-kvm.conf".text = ''
@@ -320,9 +342,13 @@ in
 
   # TODO: create graphical desktop profiles
   services.rtkit.enable = true;
+  services.rtkit.extraGroups = lib.optionals (config.services.elogind.enable == false) [
+    config.services.seatd.group
+  ];
   services.bluetooth.enable = true;
   services.seatd.enable = true;
   services.ddccontrol.enable = true;
+  services.gvfs.enable = true;
   programs.regreet.enable = true;
   programs.regreet.compositor = {
     extraArgs = [
@@ -337,6 +363,7 @@ in
     };
   };
   programs.niri.enable = true;
+  programs.mangowc.enable = true;
   programs.hyprlock.enable = true;
   programs.hyprland.enable = true;
   programs.sway.enable = true;
@@ -370,6 +397,9 @@ in
 
   # misc
   services.fprintd.enable = true;
+  services.fprintd.extraGroups = lib.optionals (config.services.elogind.enable == false) [
+    config.services.seatd.group
+  ];
   services.fstrim.enable = true;
   services.zfs.autoSnapshot.enable = true;
   services.zfs.autoSnapshot.flags = "-k -p --utc";
@@ -377,30 +407,16 @@ in
   services.tzupdate.enable = true;
   services.upower.enable = true;
   services.power-profiles-daemon.enable = true;
+  services.power-profiles-daemon.extraGroups =
+    lib.optionals (config.services.elogind.enable == false)
+      [
+        config.services.seatd.group
+      ];
   services.zerotierone.enable = true;
   services.incus.enable = true;
   finit.services.incusd = lib.mkIf config.services.incus.enable {
     manual = true;
   };
-
-  # NOTE: https://wiki.alpinelinux.org/wiki/Polkit#Using_polkit_with_seatd
-  services.polkit.extraConfig = ''
-    polkit.addRule(function(action, subject) {
-      // allow user "aaron" to utilize the fingerprint reader
-      // not great for security but acceptible given this is a single user laptop... i guess
-      if (subject.user == "aaron" && action.id.startsWith("net.reactivated.fprint.device.")) {
-        return polkit.Result.YES;
-      }
-
-      if (subject.isInGroup("${config.services.seatd.group}") && action.id.startsWith("org.freedesktop.RealtimeKit1.")) {
-        return polkit.Result.YES;
-      }
-
-      if (subject.isInGroup("${config.services.seatd.group}") && action.id.startsWith("org.freedesktop.UPower.PowerProfiles.")) {
-        return polkit.Result.YES;
-      }
-    });
-  '';
 
   security.pki.certificates = [
     # homelab certificate authority
@@ -434,6 +450,11 @@ in
     ''
   ];
 
+  xdg.autostart.enable = true;
+  xdg.icons.enable = true;
+  xdg.mime.enable = true;
+  xdg.portal.enable = true;
+
   xdg.portal.portals = [
     pkgs.xdg-desktop-portal-gnome
     pkgs.xdg-desktop-portal-gtk
@@ -441,6 +462,9 @@ in
 
   services.dbus.packages = [
     pkgs.dconf
+
+    pkgs.xfconf
+    pkgs.thunar
   ];
 
   fonts.fontconfig.enable = true;
@@ -465,21 +489,14 @@ in
     rotate_count 5
   '';
 
-  providers.privileges.rules = [
+  providers.privileges.rules = lib.optionals config.services.mdevd.enable [
     {
       command = "/run/current-system/sw/bin/poweroff";
-      users = [ "aaron" ];
+      groups = [ config.services.seatd.group ];
       requirePassword = false;
     }
     {
       command = "/run/current-system/sw/bin/reboot";
-      users = [ "aaron" ];
-      requirePassword = false;
-    }
-  ]
-  ++ lib.optionals config.services.mdevd.enable [
-    {
-      command = "/run/current-system/sw/bin/pm-suspend";
       groups = [ config.services.seatd.group ];
       requirePassword = false;
     }
@@ -510,20 +527,37 @@ in
     isNormalUser = true;
     shell = pkgs.fish;
     passwordFile = config.sops.secrets."aaron/password".path;
-    group = "users";
-    home = "/home/aaron";
-    createHome = true;
 
     extraGroups = [
       config.hardware.i2c.group
       config.services.seatd.group
       "audio"
+      # "gamemode"
       "incus-admin"
       "input"
       "kvm"
       "vboxusers"
       "video"
       "wheel"
+    ];
+
+    packages = [
+      (pkgs.noctalia-shell.overrideAttrs (oldAttrs: {
+        patches = (oldAttrs.patches or [ ]) ++ [
+          ./noctalia-shell-distro-logo.patch
+        ];
+      }))
+
+      pkgs.asciinema
+      pkgs.claude-code
+      pkgs.libreoffice
+      pkgs.mob
+      pkgs.nautilus
+      pkgs.rclone
+      pkgs.starship
+      pkgs.syncthing
+      pkgs.vex-tui
+      pkgs.wtype
     ];
   };
 
@@ -537,9 +571,6 @@ in
     isNormalUser = true;
     shell = pkgs.fish;
     passwordFile = config.sops.secrets."aaron/password".path;
-    group = "users";
-    home = "/home/test";
-    createHome = true;
 
     extraGroups = [
       config.hardware.i2c.group
@@ -549,30 +580,32 @@ in
       "video"
       "wheel"
     ];
+
+    packages = [
+      pkgs.kdePackages.dolphin
+      pkgs.kdePackages.systemsettings
+
+      ((pkgs.kdePackages.spectacle.override { tesseractLanguages = null; }).overrideAttrs {
+        patches = [
+          (pkgs.fetchpatch {
+            url = "https://raw.githubusercontent.com/getsolus/packages/9c22e23a2407d11810d00e497d6843cc92230dc6/packages/s/spectacle/files/0001-Revert-Fix-tesseract-not-being-found-on-Fedora.patch";
+            hash = "sha256-fZsqXGViN9YsQbXAJ2K44R2upnLbOhL2+8ZHfIA3/Xc=";
+          })
+        ];
+      })
+    ];
   };
 
-  environment.pathsToLink = [
-    # TODO: xdg.icon module
-    "/share/icons"
-    "/share/pixmaps"
-  ];
-
   environment.systemPackages = [
-    pkgs.slurp # needed for xdg-desktop-portal-luminous?
-    pkgs.starship # TODO: move to personal config
-    (pkgs.noctalia-shell.overrideAttrs (oldAttrs: {
-      patches = (oldAttrs.patches or [ ]) ++ [
-        ./noctalia-shell-distro-logo.patch
-      ];
-    })) # TODO: move to personal config??
-    pkgs.mob # TODO: move to personal config
-    pkgs.fresh-editor # TODO: move to personal config
-    pkgs.pamtester # temporary, testing
-    pkgs.asciinema # TODO: move to personal config
-    pkgs.syncthing # TODO: move to personal config?
-    pkgs.claude-code # TODO: move to personal config
+    pkgs.gnome-themes-extra
+    pkgs.kdePackages.breeze-icons
+    pkgs.xfconf
+    pkgs.thunar
+
+    # pkgs.faugus-launcher
     pkgs.fastfetch
     pkgs.nixos-rebuild-ng
+    pkgs.nh
 
     pkgs.ddcutil
     pkgs.dex
@@ -611,7 +644,8 @@ in
 
     (pkgs.chromium.override {
       commandLineArgs = [
-        "--enable-features=AcceleratedVideoEncoder"
+        # "--enable-features=AcceleratedVideoEncoder"
+        "--enable-features=AcceleratedVideoEncoder,VaapiVideoDecodeLinuxGL"
         "--ignore-gpu-blocklist"
         "--enable-zero-copy"
       ];
@@ -624,6 +658,8 @@ in
 
     pkgs.marp-cli
     pkgs.tdf
+    # pkgs.lazycut
+
     (pkgs.vscode-with-extensions.override {
       vscodeExtensions = with pkgs.vscode-extensions; [
         # anthropic.claude-code
@@ -667,7 +703,7 @@ in
     pkgs.libnotify
     pkgs.wiremix
     pipewire'
-    pkgs.pmutils # isn't zzz doing this now?
+    # pkgs.pmutils # isn't zzz doing this now?
     wireplumber'
     pkgs.wl-clipboard
     pkgs.xdg-utils
@@ -683,7 +719,6 @@ in
     pkgs.perl
     pkgs.strace
 
-    pkgs.hicolor-icon-theme # TODO: xdg.icon module
     pkgs.catppuccin-cursors.mochaLight
 
     pkgs.dconf
@@ -693,13 +728,6 @@ in
     pkgs.kbd
 
     pkgs.imv # TODO: set as default image viewer
-
-    (kodi'.withPackages (p: [
-      p.a4ksubtitles
-      p.jellycon
-      p.jellyfin
-      p.steam-library
-    ]))
 
     # TODO: add `programs.ssh.*` options
     pkgs.openssh

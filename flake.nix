@@ -1,7 +1,9 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";
-    finix.url = "github:finix-community/finix?ref=finit-4.16"; # "/home/aaron/code/finix/main";
+    finix.url = "/home/aaron/code/finix/plymouth"; # "github:finix-community/finix?ref=main";
+    # profiles.url = "/home/aaron/code/finix-profiles"; # "github:finix-community/profiles";
+    # profiles.inputs.finix.follows = "finix";
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -14,6 +16,7 @@
       self,
       nixpkgs,
       finix,
+      # profiles,
       sops-nix,
       noctalia-shell,
     }:
@@ -41,11 +44,8 @@
       nixosConfigurations.framework = finix.lib.finixSystem {
         inherit (pkgs) lib;
 
-        specialArgs = {
-          modulesPath = toString nixpkgs + "/nixos/modules";
-        };
-
         modules = with finix.nixosModules; [
+          # profiles.laptop
           {
             nixpkgs.pkgs = nixpkgs.lib.mkDefault pkgs;
           }
@@ -65,19 +65,23 @@
           earlyoom
           fcron
           fish
+          flatpak
           fprintd
           fstrim
           fwupd
           getty
           gnome-keyring
           greetd
+          gvfs
           hyprland
           hyprlock
           illum
           incus
           iwd
           labwc
+          lemurs
           limine
+          mangowc
           mariadb
           nftables
           niri
@@ -94,7 +98,9 @@
           sway
           sysklogd
           system76-scheduler
+          thermald
           tzupdate
+          udisks2
           upower
           uptime-kuma
           virtualbox
