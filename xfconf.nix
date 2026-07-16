@@ -1,0 +1,27 @@
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
+
+let
+  cfg = config.programs.xfconf;
+in
+{
+  options = {
+    programs.xfconf = {
+      enable = lib.mkEnableOption "Xfconf, the Xfce configuration storage system";
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = [
+      pkgs.xfconf
+    ];
+
+    services.dbus.packages = [
+      pkgs.xfconf
+    ];
+  };
+}

@@ -5,6 +5,19 @@
   lib,
   ...
 }:
+let
+  # pam = "session optional ${pkgs.pam_rundir}/lib/security/pam_rundir.so";
+
+  session_rundir =
+    if config.services.elogind.enable then
+      "session optional ${pkgs.elogind}/lib/security/pam_elogind.so"
+    else if config.services.turnstile.settings.manage_rundir or false then
+      "session optional ${config.services.turnstile.package}/lib/security/pam_turnstile.so"
+    else if config.services.seatd.enable then
+      "session optional ${pkgs.pam_xdg}/lib/security/pam_xdg.so runtime track_sessions"
+    else
+      false;
+in
 {
   security.pam.debug = true;
 
@@ -28,10 +41,10 @@
         session required pam_loginuid.so # loginuid (order 10300)
         session required ${config.security.pam.package}/lib/security/pam_lastlog.so silent # lastlog (order 10700)
 
-        ${lib.optionalString config.services.elogind.enable "session optional ${pkgs.elogind}/lib/security/pam_elogind.so"}
-        ${lib.optionalString config.services.seatd.enable "session optional ${pkgs.pam_xdg}/lib/security/pam_xdg.so runtime track_sessions"}
+        ${lib.optionalString (session_rundir != false) session_rundir}
       '';
     }
+    # session		optional	${pkgs.pam_uaccess}/lib/security/pam_uaccess.so	skip_ungrant
 
     (lib.mkIf config.programs.doas.enable or false {
       doas.text = lib.mkForce ''
@@ -114,10 +127,31 @@
         # session optional pam_loginuid.so # loginuid (order 10300)
         session required pam_limits.so conf=/etc/security/limits.conf debug # limits (order 10400) - needed for rtprio/realtime audio
 
-        ${lib.optionalString config.services.elogind.enable "session optional ${pkgs.elogind}/lib/security/pam_elogind.so"}
-        ${lib.optionalString config.services.seatd.enable "session optional ${pkgs.pam_xdg}/lib/security/pam_xdg.so runtime track_sessions"}
+        ${lib.optionalString (session_rundir != false) session_rundir}
 
         session required ${pkgs.linux-pam}/lib/security/pam_lastlog.so silent # lastlog (order 10700)
+      '';
+    })
+
+    (lib.mkIf config.services.ly.enable or false {
+      ly.text = lib.mkForce ''
+        # Account management.
+        account required pam_unix.so
+        # Authentication management.
+        auth optional pam_unix.so likeauth nullok
+        auth sufficient pam_unix.so likeauth nullok try_first_pass
+        auth required pam_deny.so
+        # Password management.
+        password sufficient pam_unix.so nullok yescrypt
+        # Session management.
+        session required pam_env.so debug conffile=/etc/security/pam_env.conf readenv=1
+        session required pam_unix.so
+        session optional pam_loginuid.so
+        session required pam_limits.so conf=/etc/security/limits.conf debug # limits (order 10400) - needed for rtprio/realtime audio
+
+        ${lib.optionalString (session_rundir != false) session_rundir}
+
+        session required ${config.security.pam.package}/lib/security/pam_lastlog.so silent
       '';
     })
   ];

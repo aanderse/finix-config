@@ -19,7 +19,7 @@ let
     done
   '';
 
-  # Merge CUPS outputs + filters + drivers into one ServerBin tree
+  # merge CUPS outputs + filters + drivers into one ServerBin tree
   bindir = pkgs.buildEnv {
     name = "cups-progs";
     paths = [
@@ -37,14 +37,13 @@ let
     ignoreCollisions = true;
   };
 
-  # Default cupsd.conf — only placed if /etc/cups/cupsd.conf doesn't exist
+  # default cupsd.conf — only placed if /etc/cups/cupsd.conf doesn't exist
   defaultCupsdConf = pkgs.writeText "cupsd.conf" ''
     LogLevel info
     Listen localhost:631
     Listen /run/cups/cups.sock
     WebInterface Yes
     DefaultAuthType Basic
-
     <Location />
       Order allow,deny
       Allow localhost
@@ -66,15 +65,29 @@ in
     enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
+      description = ''
+        Whether to enable [cups](${pkgs.cups.meta.homepage}) as a system service.
+      '';
     };
+
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.cups;
+      defaultText = lib.literalExpression "pkgs.cups";
+      description = ''
+        The package to use for `cups`.
+      '';
     };
+
     drivers = lib.mkOption {
       type = with lib.types; listOf package;
       default = [ ];
+      example = lib.literalExpression "with pkgs; [ gutenprint hplip splix ]";
+      description = ''
+        `CUPS` drivers to use.
+      '';
     };
+
     settings = lib.mkOption {
       type = lib.types.submodule {
         freeformType = format.type;
@@ -87,55 +100,90 @@ in
               "lpadmin"
             ];
             apply = lib.concatStringsSep " ";
-            description = "Specifies the group(s) to use for @SYSTEM group authentication.";
+            description = ''
+              Specifies the group(s) to use for `@SYSTEM` group authentication.
+            '';
           };
 
           ServerBin = lib.mkOption {
             type = lib.types.str;
             default = "${bindir}/lib/cups";
-            description = "Specifies the directory containing the backends, CGI programs, filters, helper programs, notifiers, and port monitors.";
+            description = ''
+              Specifies the directory containing the backends, CGI programs, filters, helper programs, notifiers, and port monitors.
+            '';
           };
 
           DataDir = lib.mkOption {
             type = lib.types.str;
             default = "${bindir}/share/cups";
-            description = "Specifies the directory where data files can be found.";
+            description = ''
+              Specifies the directory where data files can be found.
+            '';
           };
 
           DocumentRoot = lib.mkOption {
             type = lib.types.str;
             default = "${cfg.package.out}/share/doc/cups";
-            description = "Specifies the root directory for the CUPS web interface content.";
+            description = ''
+              Specifies the root directory for the `CUPS` web interface content.
+            '';
           };
 
           SetEnv = lib.mkOption {
             type = with lib.types; attrsOf str;
             default = { };
             apply = lib.mapAttrsToList (k: v: "${k} ${v}");
-            description = "Set the specified environment variable to be passed to child processes. Note: the standard CUPS filter and backend environment variables cannot be overridden using this directive.";
+            description = ''
+              Set the specified environment variable to be passed to child processes.
+
+              ::: {.note}
+              The standard `CUPS` filter and backend environment variables cannot be overridden using this directive.
+              :::
+            '';
           };
 
           AccessLog = lib.mkOption {
             type = lib.types.str;
             default = "stderr";
-            description = ''Defines the access log filename. Specifying a blank filename disables access log generation. The value "stderr" causes log entries to be sent to the standard error file when the scheduler is running in the foreground, or to the system log daemon when run in the background. The value "syslog" causes log entries to be sent to the system log daemon.'';
+            description = ''
+              Defines the access log filename. Specifying a blank filename disables access log
+              generation. The value `"stderr"` causes log entries to be sent to the standard error
+              file when the scheduler is running in the foreground, or to the system log daemon
+              when run in the background. The value `"syslog"` causes log entries to be sent to
+              the system log daemon.
+            '';
           };
 
           ErrorLog = lib.mkOption {
             type = lib.types.str;
             default = "stderr";
-            description = ''Defines the error log filename. Specifying a blank filename disables error log generation. The value "stderr" causes log entries to be sent to the standard error file when the scheduler is running in the foreground, or to the system log daemon when run in the background. The value "syslog" causes log entries to be sent to the system log daemon.'';
+            description = ''
+              Defines the error log filename. Specifying a blank filename disables error log
+              generation. The value `"stderr"` causes log entries to be sent to the standard
+              error file when the scheduler is running in the foreground, or to the system log
+              daemon when run in the background. The value `"syslog"` causes log entries to be
+              sent to the system log daemon.
+            '';
           };
 
           PageLog = lib.mkOption {
             type = lib.types.str;
             default = "stderr";
-            description = ''Defines the page log filename. The value "stderr" causes log entries to be sent to the standard error file when the scheduler is running in the foreground, or to the system log daemon when run in the background. The value "syslog" causes log entries to be sent to the system log daemon. Specifying a blank filename disables page log generation.'';
+            description = ''
+              Defines the page log filename. The value `"stderr"` causes log entries to be
+              sent to the standard error file when the scheduler is running in the foreground,
+              or to the system log daemon when run in the background. The value `"syslog"`
+              causes log entries to be sent to the system log daemon. Specifying a blank
+              filename disables page log generation.
+            '';
           };
         };
       };
       default = { };
-      description = "Settings for cups-files.conf. See cups-files.conf(5).";
+      description = ''
+        File and directory configuration file for `cups`. See {manpage}`cups-files.conf(5)`
+        for additional details.
+      '';
     };
 
     user = lib.mkOption {
@@ -176,9 +224,6 @@ in
     };
 
     # boot.blacklistedKernelModules = [ "usblp" ];
-    environment.etc."modprobe.d/usblp.conf".text = ''
-      blacklist usblp
-    '';
 
     services.mdevd.hotplugRules = lib.mkBefore ''
       -SUBSYSTEM=usb;DEVTYPE=usb_device;.* root:root 0660 @${chgrpPrinter}
